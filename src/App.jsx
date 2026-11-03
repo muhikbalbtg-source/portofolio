@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Mail,
   ExternalLink,
@@ -13,13 +13,53 @@ import {
   Cpu,
   Briefcase,
   ChevronDown,
+  ArrowLeft,
 } from 'lucide-react';
 
 const profileImg = '/profile.jpg';
 
+const projects = [
+  {
+    slug: 'sim-mahasiswa',
+    title: 'SIM Mahasiswa',
+    desc: 'Aplikasi Sistem Informasi Akademik berbasis web untuk pengelolaan data mahasiswa menggunakan Laravel, PHP, dan MySQL.',
+    tech: ['Laravel', 'PHP', 'MySQL', 'Tailwind CSS'],
+    image: '/sim-mahasiswa.png',
+  },
+  {
+    slug: 'kedai-hitam-putih',
+    title: 'Kedai Hitam Putih - Perancangan & Prototype Design',
+    desc: 'Perancangan antarmuka dan pembuatan prototype design untuk sistem manajemen Kedai Hitam Putih.',
+    tech: ['UI/UX Design', 'Figma', 'Prototype'],
+    image: '/kedai-hitam-putih.png',
+  },
+  {
+    slug: 'pengawas-proyek',
+    title: 'Pengawas Proyek Lapangan',
+    desc: 'Mengawasi aktivitas proyek di lapangan, mengoordinasikan pekerja, dan memantau progres pekerjaan.',
+    tech: ['Koordinasi Tim', 'Pengawasan', 'Komunikasi'],
+    image: '/pengawas-proyek.png',
+  },
+];
+
+const academicProjects = projects.filter(
+  (project) => project.slug !== 'pengawas-proyek',
+);
+
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const [activeSection, setActiveSection] = useState('home');
+  const scrollProgressRef = useRef(null);
+  const spotlightCardRef = useRef(null);
+  const [projectSlug, setProjectSlug] = useState(() =>
+    window.location.hash.startsWith('#/proyek/')
+      ? window.location.hash.slice('#/proyek/'.length)
+      : '',
+  );
+  const selectedProject = projects.find(
+    (project) => project.slug === projectSlug,
+  );1
 
   const accentText = darkMode ? 'text-violet-300' : 'text-violet-800';
   const accentHoverText = darkMode
@@ -31,22 +71,138 @@ export default function App() {
     setDarkMode((previous) => !previous);
   };
 
-  const projects = [
-    {
-      title: 'SIM Mahasiswa',
-      desc: 'Aplikasi Sistem Informasi Akademik berbasis web untuk pengelolaan data mahasiswa menggunakan Laravel, PHP, dan MySQL.',
-      tech: ['Laravel', 'PHP', 'MySQL', 'Tailwind CSS'],
-      link: '#',
-      image: '/sim-mahasiswa.png',
-    },
-    {
-      title: 'Kedai Hitam Putih - Perancangan & Prototype Design',
-      desc: 'Perancangan antarmuka dan pembuatan prototype design untuk sistem manajemen Kedai Hitam Putih.',
-      tech: ['UI/UX Design', 'Figma', 'Prototype'],
-      link: '#',
-      image: '/kedai-hitam-putih.png',
-    },
-  ];
+  const clearSpotlight = (card) => {
+    card?.style.removeProperty('--pointer-x');
+    card?.style.removeProperty('--pointer-y');
+    if (spotlightCardRef.current === card) spotlightCardRef.current = null;
+  };
+
+  const handlePointerMove = (event) => {
+    if (event.pointerType !== 'mouse') return;
+
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const card = target.closest('.interactive-card');
+    if (!card) {
+      clearSpotlight(spotlightCardRef.current);
+      return;
+    }
+
+    if (spotlightCardRef.current !== card) {
+      clearSpotlight(spotlightCardRef.current);
+      spotlightCardRef.current = card;
+    }
+
+    const bounds = card.getBoundingClientRect();
+    card.style.setProperty('--pointer-x', `${event.clientX - bounds.left}px`);
+    card.style.setProperty('--pointer-y', `${event.clientY - bounds.top}px`);
+  };
+
+  const handlePointerOut = (event) => {
+    if (!(event.target instanceof Element)) return;
+
+    const card = event.target.closest('.interactive-card');
+    const nextTarget =
+      event.relatedTarget instanceof Element
+        ? event.relatedTarget.closest('.interactive-card')
+        : null;
+    if (card && card !== nextTarget) clearSpotlight(card);
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      setProjectSlug(
+        hash.startsWith('#/proyek/') ? hash.slice('#/proyek/'.length) : '',
+      );
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    const updateProgress = () => {
+      frame = 0;
+      const scrollableHeight =
+        document.documentElement.scrollHeight - window.innerHeight;
+      const progress =
+        scrollableHeight > 0
+          ? Math.min(window.scrollY / scrollableHeight, 1)
+          : 0;
+      if (!scrollProgressRef.current) return;
+      scrollProgressRef.current.style.transform = `scaleX(${progress})`;
+      scrollProgressRef.current.setAttribute(
+        'aria-valuenow',
+        String(Math.round(progress * 100)),
+      );
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateProgress);
+    };
+
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    updateProgress();
+
+    return () => {
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    const sections = document.querySelectorAll('section[id]');
+    const reduceMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    const revealObserver = reduceMotion
+      ? null
+      : new IntersectionObserver(
+          (entries, observer) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -10% 0px' },
+        );
+    const activeSectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id);
+        });
+      },
+      { rootMargin: '-45% 0px -45% 0px' },
+    );
+
+    sections.forEach((section) => {
+      activeSectionObserver.observe(section);
+      if (section.id !== 'home' && revealObserver) {
+        section.classList.add('reveal-pending');
+        revealObserver.observe(section);
+      }
+    });
+
+    return () => {
+      revealObserver?.disconnect();
+      activeSectionObserver.disconnect();
+    };
+  }, [projectSlug]);
+
+  useEffect(() => {
+    if (projectSlug || window.location.hash !== '#projects') return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [projectSlug]);
 
   const skills = [
     {
@@ -108,8 +264,85 @@ export default function App() {
   const mutedText = darkMode ? 'text-slate-400' : 'text-slate-600';
   const headingText = darkMode ? 'text-white' : 'text-slate-900';
 
+  if (selectedProject) {
+    return (
+      <main
+        className={`project-detail-page min-h-screen px-6 py-10 sm:py-16 ${
+          darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'
+        }`}
+      >
+        <div className="mx-auto max-w-5xl">
+          <a
+            href="#projects"
+            className={`inline-flex items-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors ${
+              darkMode
+                ? 'text-violet-300 hover:text-violet-200'
+                : 'text-violet-700 hover:text-violet-900'
+            }`}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Kembali ke proyek
+          </a>
+
+          <article className="project-detail-card mt-8 overflow-hidden rounded-3xl border border-violet-500/20 bg-slate-900/70 shadow-2xl shadow-violet-950/20">
+            <div className="relative flex h-64 items-center justify-center bg-gradient-to-br from-violet-600/30 via-fuchsia-500/10 to-slate-900 sm:h-[26rem]">
+              <Briefcase
+                aria-hidden="true"
+                className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 text-violet-300"
+              />
+              <img
+                src={selectedProject.image}
+                alt={`Preview ${selectedProject.title}`}
+                className="project-detail-image h-full w-full object-cover object-top"
+                onError={(event) => event.currentTarget.remove()}
+              />
+            </div>
+
+            <div className="p-6 sm:p-10">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-violet-300">
+                Detail Proyek
+              </p>
+              <h1 className="mt-3 text-3xl font-bold leading-tight text-white sm:text-4xl">
+                {selectedProject.title}
+              </h1>
+              <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300">
+                {selectedProject.desc}
+              </p>
+
+              <div className="mt-8 border-t border-slate-700 pt-6">
+                <h2 className="text-lg font-semibold text-white">
+                  Teknologi dan tools
+                </h2>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedProject.tech.map((tech) => (
+                    <span
+                      key={tech}
+                      className="rounded-full border border-violet-400/20 bg-violet-500/10 px-4 py-2 text-sm text-violet-200"
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <a
+                href="#projects"
+                className="mt-8 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-violet-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Kembali ke portofolio
+              </a>
+            </div>
+          </article>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div
+      onPointerMove={handlePointerMove}
+      onPointerOut={handlePointerOut}
       className={`min-h-screen font-sans transition-colors duration-300 ${
         darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'
       }`}
@@ -172,6 +405,32 @@ export default function App() {
           animation: buttonShine 3.8s ease-in-out infinite;
           pointer-events: none;
         }
+        @keyframes detailEnter {
+          from {
+            opacity: 0;
+            transform: translateY(28px) scale(0.98);
+            filter: blur(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+          }
+        }
+        @keyframes detailImageDrift {
+          from {
+            transform: scale(1.02);
+          }
+          to {
+            transform: scale(1.09);
+          }
+        }
+        .project-detail-card {
+          animation: detailEnter 750ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+        }
+        .project-detail-image {
+          animation: detailImageDrift 12s ease-in-out alternate infinite;
+        }
         .button-shine > * {
           position: relative;
           z-index: 1;
@@ -193,8 +452,53 @@ export default function App() {
           transition: transform 250ms ease;
         }
         .nav-link:hover::after,
-        .nav-link:focus-visible::after {
+        .nav-link:focus-visible::after,
+        .nav-link-active::after {
           transform: scaleX(1);
+        }
+        section.reveal-pending {
+          opacity: 0;
+          transform: translateY(24px);
+          transition:
+            opacity 700ms ease,
+            transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+        }
+        section.reveal-pending.is-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        @keyframes cardReveal {
+          from {
+            opacity: 0;
+            filter: blur(5px);
+          }
+          to {
+            opacity: 1;
+            filter: blur(0);
+          }
+        }
+        section.reveal-pending.is-visible .interactive-card {
+          animation: cardReveal 600ms ease both;
+        }
+        section.reveal-pending.is-visible .interactive-card:nth-child(2) {
+          animation-delay: 90ms;
+        }
+        section.reveal-pending.is-visible .interactive-card:nth-child(3) {
+          animation-delay: 180ms;
+        }
+        section.reveal-pending.is-visible .interactive-card:nth-child(4) {
+          animation-delay: 270ms;
+        }
+        .scroll-progress-bar {
+          position: fixed;
+          inset: 0 0 auto;
+          z-index: 60;
+          height: 3px;
+          background: linear-gradient(90deg, #8b5cf6, #e879f9, #67e8f9);
+          box-shadow: 0 0 12px rgba(167, 139, 250, 0.7);
+          transform: scaleX(0);
+          transform-origin: left;
+          pointer-events: none;
         }
         @keyframes gentleBounce {
           0%,
@@ -207,6 +511,196 @@ export default function App() {
         }
         .animate-gentle-bounce {
           animation: gentleBounce 1.8s ease-in-out infinite;
+        }
+        @keyframes profileOrbit {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes orbitLabelCounter {
+          to {
+            transform: rotate(-360deg);
+          }
+        }
+        @keyframes auroraBreathe {
+          0%,
+          100% {
+            opacity: 0.45;
+            transform: scale(0.94) rotate(-8deg);
+          }
+          50% {
+            opacity: 0.8;
+            transform: scale(1.08) rotate(8deg);
+          }
+        }
+        .hero-aurora {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: min(86vw, 46rem);
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background: conic-gradient(
+            from 40deg,
+            transparent 0deg,
+            rgba(139, 92, 246, 0.12) 65deg,
+            rgba(232, 121, 249, 0.19) 125deg,
+            transparent 190deg,
+            rgba(103, 232, 249, 0.1) 250deg,
+            transparent 320deg
+          );
+          filter: blur(35px);
+          animation: auroraBreathe 12s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .profile-orbit {
+          position: absolute;
+          inset: -13%;
+          z-index: 2;
+          border: 2px solid rgba(196, 181, 253, 0.78);
+          border-radius: 50%;
+          box-shadow:
+            0 0 12px rgba(167, 139, 250, 0.72),
+            0 0 38px rgba(139, 92, 246, 0.4),
+            inset 0 0 26px rgba(139, 92, 246, 0.18);
+          animation: profileOrbit 32s linear infinite;
+          pointer-events: none;
+        }
+        .profile-orbit::before {
+          content: '';
+          position: absolute;
+          inset: 11%;
+          border: 1px dashed rgba(232, 121, 249, 0.65);
+          border-radius: 50%;
+        }
+        .profile-orbit::after {
+          content: '';
+          position: absolute;
+          top: 8%;
+          left: 50%;
+          width: 0.85rem;
+          height: 0.85rem;
+          border: 2px solid #fff;
+          border-radius: 50%;
+          background: #e879f9;
+          box-shadow:
+            0 0 8px #fff,
+            0 0 18px #e879f9,
+            0 0 32px rgba(139, 92, 246, 0.95);
+          transform: translateX(-50%);
+        }
+        @keyframes orbitStarTwinkle {
+          0%,
+          100% {
+            opacity: 0.4;
+            transform: scale(0.65) rotate(0deg);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.2) rotate(45deg);
+          }
+        }
+        .orbit-star {
+          position: absolute;
+          z-index: 3;
+          width: 0.7rem;
+          height: 0.7rem;
+          clip-path: polygon(
+            50% 0,
+            62% 38%,
+            100% 50%,
+            62% 62%,
+            50% 100%,
+            38% 62%,
+            0 50%,
+            38% 38%
+          );
+          background: linear-gradient(135deg, #fff, #e879f9 58%, #8b5cf6);
+          filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 10px #e879f9);
+          animation: orbitStarTwinkle 2.8s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .orbit-star:nth-child(4) {
+          top: 16%;
+          left: 8%;
+          width: 0.9rem;
+          height: 0.9rem;
+        }
+        .orbit-star:nth-child(5) {
+          top: 13%;
+          right: 14%;
+          animation-delay: 700ms;
+        }
+        .orbit-star:nth-child(6) {
+          top: 48%;
+          right: 1%;
+          width: 0.8rem;
+          height: 0.8rem;
+          animation-delay: 1.3s;
+        }
+        .orbit-star:nth-child(7) {
+          right: 17%;
+          bottom: 12%;
+          width: 0.95rem;
+          height: 0.95rem;
+          animation-delay: 350ms;
+        }
+        .orbit-star:nth-child(8) {
+          bottom: 17%;
+          left: 7%;
+          animation-delay: 1.7s;
+        }
+        .orbit-star:nth-child(9) {
+          top: 48%;
+          left: 0;
+          width: 0.8rem;
+          height: 0.8rem;
+          animation-delay: 1s;
+        }
+        .orbit-marker {
+          position: absolute;
+          display: flex;
+          width: max-content;
+        }
+        .orbit-marker:nth-child(1) {
+          top: -1rem;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .orbit-marker:nth-child(2) {
+          top: 50%;
+          right: -1.5rem;
+          transform: translateY(-50%);
+        }
+        .orbit-marker:nth-child(3) {
+          bottom: -1rem;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .orbit-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          border: 1px solid rgba(196, 181, 253, 0.72);
+          border-radius: 9999px;
+          background: rgba(15, 23, 42, 0.96);
+          padding: 0.5rem 0.85rem;
+          color: #f5eaff;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          box-shadow:
+            0 0 18px rgba(139, 92, 246, 0.28),
+            0 8px 28px rgba(2, 6, 23, 0.55);
+          animation: orbitLabelCounter 32s linear infinite;
+        }
+        .orbit-label::before {
+          content: '';
+          width: 0.4rem;
+          height: 0.4rem;
+          border-radius: 50%;
+          background: #c4b5fd;
+          box-shadow: 0 0 10px rgba(196, 181, 253, 0.9);
         }
         @keyframes profileRingSpin {
           to {
@@ -400,6 +894,12 @@ export default function App() {
           animation: gradientShift 4s linear infinite;
         }
         .interactive-card {
+          background-image: radial-gradient(
+            260px circle at var(--pointer-x, -1000px) var(--pointer-y, -1000px),
+            rgba(167, 139, 250, 0.13),
+            transparent 75%
+          );
+          background-repeat: no-repeat;
           transition:
             transform 250ms ease,
             box-shadow 250ms ease,
@@ -631,7 +1131,14 @@ export default function App() {
           .animate-status-light,
           .animate-float-glow,
           .animate-float-glow-delayed,
+          .hero-aurora,
+          .profile-orbit,
+          .orbit-star,
+          .orbit-label,
           .animate-gradient-text,
+          section.reveal-pending.is-visible .interactive-card,
+          .project-detail-card,
+          .project-detail-image,
           .section-title::after,
           .button-shine::after,
           .floating-tag,
@@ -667,8 +1174,13 @@ export default function App() {
           .hobby-icon,
           .hobby-icon img,
           .nav-link::after,
-          .social-link svg {
+          .social-link svg,
+          section.reveal-pending {
             transition: none;
+          }
+          section.reveal-pending {
+            opacity: 1;
+            transform: none;
           }
           .nav-link:hover::after,
           .nav-link:focus-visible::after {
@@ -691,6 +1203,15 @@ export default function App() {
           scroll-padding-top: 80px;
         }
       `}</style>
+      <div
+        ref={scrollProgressRef}
+        className="scroll-progress-bar"
+        role="progressbar"
+        aria-label="Progres gulir halaman"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow="0"
+      />
 
       {/* NAVBAR */}
       <nav
@@ -720,7 +1241,12 @@ export default function App() {
               <a
                 key={item.href}
                 href={item.href}
-                className={`nav-link text-sm transition-colors ${accentHoverText} ${navText}`}
+                aria-current={activeSection === item.href.slice(1) ? 'location' : undefined}
+                className={`nav-link text-sm transition-colors ${accentHoverText} ${navText} ${
+                  activeSection === item.href.slice(1)
+                    ? `nav-link-active ${darkMode ? 'text-violet-300' : 'text-violet-700'}`
+                    : ''
+                }`}
               >
                 {item.label}
               </a>
@@ -765,7 +1291,12 @@ export default function App() {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className={`nav-link block py-2 transition-colors ${accentHoverText} ${navText}`}
+                aria-current={activeSection === item.href.slice(1) ? 'location' : undefined}
+                className={`nav-link block py-2 transition-colors ${accentHoverText} ${navText} ${
+                  activeSection === item.href.slice(1)
+                    ? `nav-link-active ${darkMode ? 'text-violet-300' : 'text-violet-700'}`
+                    : ''
+                }`}
               >
                 {item.label}
               </a>
@@ -791,6 +1322,7 @@ export default function App() {
             darkMode ? 'bg-fuchsia-500/10' : 'bg-fuchsia-300/25'
           }`}
         />
+        <div aria-hidden="true" className="hero-aurora" />
         <div className={`${containerClass} relative z-10 w-full`}>
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="animate-fade-in-up">
@@ -849,6 +1381,23 @@ export default function App() {
             <div className="flex justify-center animate-fade-in-up">
               <div className="flex flex-col items-center">
                 <div className="profile-stage relative w-[min(74vw,20rem)] sm:w-80 lg:w-96">
+                  <div className="profile-orbit" aria-hidden="true">
+                    <span className="orbit-marker">
+                      <span className="orbit-label">CREATIVE</span>
+                    </span>
+                    <span className="orbit-marker">
+                      <span className="orbit-label">BUILD</span>
+                    </span>
+                    <span className="orbit-marker">
+                      <span className="orbit-label">INNOVATE</span>
+                    </span>
+                    <span className="orbit-star" />
+                    <span className="orbit-star" />
+                    <span className="orbit-star" />
+                    <span className="orbit-star" />
+                    <span className="orbit-star" />
+                    <span className="orbit-star" />
+                  </div>
                   <span aria-hidden="true" className="profile-sparkle -top-2 right-[12%]" />
                   <span aria-hidden="true" className="profile-sparkle top-[28%] -right-2" />
                   <span aria-hidden="true" className="profile-sparkle -bottom-2 left-[18%]" />
@@ -965,12 +1514,61 @@ export default function App() {
             </h2>
 
             <p className={`mt-4 ${mutedText}`}>
-              Saya terus mengembangkan kemampuan melalui pengalaman akademik dan penerapan teknologi.
+              Pengalaman saya mencakup pengawasan kerja lapangan serta proyek akademik di bidang teknologi.
             </p>
           </div>
 
+          <div className={`interactive-card mx-auto mb-8 max-w-4xl overflow-hidden rounded-2xl border ${cardClass}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left">
+                <caption className="px-6 py-4 text-left text-lg font-bold text-violet-300">
+                  Pengalaman Kerja Lapangan
+                </caption>
+                <thead>
+                  <tr className={darkMode ? 'bg-slate-800/80' : 'bg-slate-100'}>
+                    <th
+                      scope="col"
+                      className={`px-6 py-3 text-xs font-semibold uppercase tracking-wider ${mutedText}`}
+                    >
+                      Posisi
+                    </th>
+                    <th
+                      scope="col"
+                      className={`px-6 py-3 text-xs font-semibold uppercase tracking-wider ${mutedText}`}
+                    >
+                      Tanggung Jawab
+                    </th>
+                    <th
+                      scope="col"
+                      className={`px-6 py-3 text-xs font-semibold uppercase tracking-wider ${mutedText}`}
+                    >
+                      Kompetensi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className={darkMode ? 'border-t border-slate-800' : 'border-t border-slate-200'}>
+                    <th
+                      scope="row"
+                      className={`px-6 py-5 align-top text-sm font-bold ${headingText}`}
+                    >
+                      Pengawas Proyek Lapangan
+                    </th>
+                    <td className={`px-6 py-5 align-top text-sm leading-relaxed ${mutedText}`}>
+                      Mengawasi aktivitas kerja di lapangan, mengoordinasikan
+                      pekerja, dan memantau progres pekerjaan.
+                    </td>
+                    <td className={`px-6 py-5 align-top text-sm leading-relaxed ${mutedText}`}>
+                      Koordinasi tim, komunikasi, dan pemantauan pekerjaan.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {projects.map((project) => (
+            {academicProjects.map((project) => (
               <article
                 key={project.title}
                 className={`experience-card interactive-card p-6 rounded-2xl border ${cardClass}`}
@@ -1000,6 +1598,7 @@ export default function App() {
               </article>
             ))}
           </div>
+
         </div>
       </section>
 
@@ -1103,30 +1702,38 @@ export default function App() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
             {projects.map((project) => (
               <article
                 key={project.title}
-                className={`project-card interactive-card rounded-2xl border overflow-hidden hover:border-violet-500/50 ${cardClass}`}
+                className={`project-card interactive-card flex flex-col rounded-2xl border overflow-hidden hover:border-violet-500/50 ${cardClass}`}
               >
-                <div className="card-icon project-preview h-40 bg-gradient-to-br from-violet-600/30 via-purple-600/20 to-slate-800 flex items-center justify-center">
+                <div className="card-icon project-preview relative h-40 shrink-0 bg-gradient-to-br from-violet-600/30 via-purple-600/20 to-slate-800 flex items-center justify-center">
+                  <Briefcase
+                    aria-hidden="true"
+                    className={`absolute h-16 w-16 ${accentText}`}
+                  />
                   {project.image ? (
                     <img
                       src={project.image}
                       alt={`Preview ${project.title}`}
                       className="w-full h-full object-cover object-top"
+                      onError={(event) => event.currentTarget.remove()}
                     />
                   ) : (
-                    <Database className={`w-16 h-16 ${accentText}`} />
+                    <Database
+                      aria-hidden="true"
+                      className={`relative z-10 h-16 w-16 ${accentText}`}
+                    />
                   )}
                 </div>
 
-                <div className="p-6">
+                <div className="flex flex-1 flex-col p-6">
                   <h3 className={`text-xl font-bold mb-3 ${headingText}`}>
                     {project.title}
                   </h3>
 
-                  <p className={`text-sm leading-relaxed mb-5 ${mutedText}`}>
+                  <p className={`text-sm leading-relaxed mb-5 ${mutedText} flex-1`}>
                     {project.desc}
                   </p>
 
@@ -1142,13 +1749,8 @@ export default function App() {
                   </div>
 
                   <a
-                    href={project.link}
-                    onClick={(event) => {
-                      if (project.link === '#') {
-                        event.preventDefault();
-                      }
-                    }}
-                    className={`inline-flex items-center gap-2 text-sm font-semibold ${accentText} ${accentHoverText}`}
+                    href={`#/proyek/${project.slug}`}
+                    className={`mt-auto inline-flex items-center gap-2 text-sm font-semibold ${accentText} ${accentHoverText}`}
                   >
                     Lihat Detail
                     <ExternalLink className="w-4 h-4" />
